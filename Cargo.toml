@@ -1,0 +1,13 @@
+[package]
+name = "majin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+arrayvec = "0.7.6"
+ratatui = { version = "0.28", optional = true }
+crossterm = { version = "0.28", optional = true }
+
+[features]
+default = []
+debug = ["ratatui", "crossterm"]
