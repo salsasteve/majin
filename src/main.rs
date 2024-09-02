@@ -3,59 +3,151 @@ use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-#[cfg(feature = "debug")]
 use majin::core::Unit;
-use ratatui::{backend::CrosstermBackend, widgets::canvas::Canvas, Terminal};
+use majin::core::Op;
+// use ratatui::{backend::CrosstermBackend, widgets::canvas::Canvas, Terminal};
 use std::io;
+use ratatui::{backend::CrosstermBackend, widgets::{Block, Borders, Paragraph}, layout::{Layout, Constraint, Direction}, style::{Style, Color}, Terminal};
+
+// fn main() -> Result<(), io::Error> {
+//     // let a = Unit::new(2i32);
+//     // let b = Unit::new(3i32);
+//     // let c = Unit::new(4i32);
+//     // let d = Unit::new(5i32);
+//     // let root = (a + b) * c + d;
+
+//     // let (nodes, edges) = trace(&root);
+
+//     // print the nodes and edges with lines
+//     // in the terminal to visualize the tree
+//     // in this format:
+//     //     Data 2 ----
+//     //                 \
+//     //                  --> Op + --> Data 5 ----
+//     //                 /                         \
+//     //     Data 3 ----                            --> Op * --> Data 20 ----
+//     //                                           /                          \
+//     //                               Data 4 ----                             --> Data 25
+//     //                                                                      /
+//     //                                                         Data  5 ----
+
+//     // Coordinates for the triangle shape (caret)
+//     let x = 10;
+//     let y = 5;
+
+//     // Set up terminal
+//     let mut terminal = setup_terminal()?;
+
+//     // Main loop for rendering the triangle shape
+//     loop {
+//         terminal.draw(|f| {
+//             let size = f.area();
+//             let canvas = Canvas::default()
+//                 .x_bounds([0.0, size.width as f64])
+//                 .y_bounds([0.0, size.height as f64])
+//                 .paint(|ctx| {
+//                     // Draw a single triangle shape (caret `^`)
+//                     ctx.print(x as f64, y as f64, "■");
+//                 });
+
+//             f.render_widget(canvas, size);
+//         })?;
+
+//         // Break the loop if 'q' is pressed
+//         if let Event::Key(key) = event::read()? {
+//             if key.code == KeyCode::Char('q') {
+//                 break;
+//             }
+//         }
+//     }
+
+//     // Restore terminal
+//     cleanup_terminal(&mut terminal)?;
+//     Ok(())
+// }
 
 fn main() -> Result<(), io::Error> {
-    // let a = Unit::new(2i32);
-    // let b = Unit::new(3i32);
-    // let c = Unit::new(4i32);
-    // let d = Unit::new(5i32);
-    // let root = (a + b) * c + d;
+    // Example to visualize
+    let a = Unit::new(2i32, Some("a".to_string()));
+    let b = Unit::new(3i32, Some("b".to_string()));
+    let c = Unit::new(4i32, Some("c".to_string()));
+    let d = Unit::new(5i32, Some("d".to_string()));
+    let e = Unit::new(6i32, Some("e".to_string()));
+    // 25 = (2 + 3) * 4 + 5 + 6
+    let mut ab = a + b;
+    ab.label = "ab".to_string();
+    let mut abc = ab * c;
+    abc.label = "abc".to_string();
+    let mut abcd = abc + d;
+    abcd.label = "abcd".to_string();
+    let mut root = abcd + e;
+    root.label = "root".to_string();
 
-    // let (nodes, edges) = trace(&root);
-
-    // print the nodes and edges with lines
-    // in the terminal to visualize the tree
-    // in this format:
-    //     Data 2 ----
-    //                 \
-    //                  --> Op + --> Data 5 ----
-    //                 /                         \
-    //     Data 3 ----                            --> Op * --> Data 20 ----
-    //                                           /                          \
-    //                               Data 4 ----                             --> Data 25
-    //                                                                      /
-    //                                                         Data  5 ----
-
-    // Coordinates for the triangle shape (caret)
-    let x = 10;
-    let y = 5;
+    // Get the nodes and edges
+    let (nodes, edges) = trace(&root);
 
     // Set up terminal
     let mut terminal = setup_terminal()?;
+    let mut scroll: u16 = 0;
 
-    // Main loop for rendering the triangle shape
     loop {
         terminal.draw(|f| {
             let size = f.area();
-            let canvas = Canvas::default()
-                .x_bounds([0.0, size.width as f64])
-                .y_bounds([0.0, size.height as f64])
-                .paint(|ctx| {
-                    // Draw a single triangle shape (caret `^`)
-                    ctx.print(x as f64, y as f64, "■");
-                });
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Percentage(100)].as_ref())
+                .split(size);
 
-            f.render_widget(canvas, size);
+            let mut graph_text = vec![];
+
+            for (node, parent ,level) in nodes.iter() {
+                // Only process nodes that have an operation
+                if let Some(op) = &node.op {
+                    // Determine indentation based on whether the node is a left or right child
+                    let indent = if let Some(parent) = parent {
+                        if *parent.prev[0] == **node {
+                            level * 4
+                        } else {
+                            level * 4 + 2
+                        }
+                    } else {
+                        0
+                    };
+
+                        
+
+                    let lines = draw_node_with_op(node, op);
+                    let width = size.width as usize - indent;
+            
+                    for line in lines {
+                        let centered_line = format!("{:padding$}{}", "", line, padding = 0);
+                        graph_text.push(center_text(&centered_line, width));
+                    }
+                }
+                // If the node doesn't have an op, it will be skipped.
+            }
+
+            let paragraph = Paragraph::new(graph_text.join("\n"))
+                .block(Block::default().borders(Borders::ALL).title("Graph"))
+                .style(Style::default().fg(Color::White))
+                .scroll((scroll, 0));
+
+            f.render_widget(paragraph, chunks[0]);
         })?;
 
-        // Break the loop if 'q' is pressed
+        // Handle input for scrolling
         if let Event::Key(key) = event::read()? {
-            if key.code == KeyCode::Char('q') {
-                break;
+            match key.code {
+                KeyCode::Char('q') => break,
+                KeyCode::Up => {
+                    if scroll > 0 {
+                        scroll -= 1;
+                    }
+                }
+                KeyCode::Down => {
+                    scroll += 1;
+                }
+                _ => {}
             }
         }
     }
@@ -63,6 +155,36 @@ fn main() -> Result<(), io::Error> {
     // Restore terminal
     cleanup_terminal(&mut terminal)?;
     Ok(())
+}
+
+
+fn draw_simple_node(node: &Unit<i32>) -> Vec<String> {
+    vec![format!("{}", node.value)]
+}
+
+fn draw_node_with_op(node: &Unit<i32>, op: &Op) -> Vec<String> {
+    let operation_symbol = match op {
+        Op::Add(_) => "+",
+        Op::Mul(_) => "*",
+    };
+
+    let mut lines = Vec::new();
+
+    if node.label == "root" {
+        lines.push(format!("{}", node.value));
+    }
+
+    lines.push(" |".to_string());
+    lines.push(format!(" {}", operation_symbol));
+    lines.push(" /   \\".to_string());
+    lines.push(format!(" {}   {}", node.prev[0].value, node.prev[1].value));
+
+    lines
+}
+
+fn center_text(text: &str, width: usize) -> String {
+    let padding = (width.saturating_sub(text.len())) / 2;
+    format!("{:padding$}{}", "", text, padding = padding)
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, io::Error> {
@@ -87,7 +209,7 @@ fn cleanup_terminal(
     Ok(())
 }
 
-fn trace<T>(root: &Unit<T>) -> (Vec<&Unit<T>>, Vec<(&Unit<T>, &Unit<T>)>)
+fn trace<T>(root: &Unit<T>) -> (Vec<(&Unit<T>, Option<&Unit<T>>, usize)>, Vec<(&Unit<T>, &Unit<T>)>)
 where
     T: std::fmt::Debug + std::cmp::PartialEq,
 {
@@ -96,21 +218,34 @@ where
 
     fn build<'a, T>(
         v: &'a Unit<T>,
-        nodes: &mut Vec<&'a Unit<T>>,
+        parent: Option<&'a Unit<T>>,
+        nodes: &mut Vec<(&'a Unit<T>, Option<&'a Unit<T>>, usize)>,
         edges: &mut Vec<(&'a Unit<T>, &'a Unit<T>)>,
+        level: usize,
     ) where
         T: std::fmt::Debug + std::cmp::PartialEq,
     {
-        if !nodes.contains(&v) {
-            nodes.push(v);
+        // Check if the current node `v` is already in `nodes_with_levels`:
+        // - `nodes_with_levels.iter()`: Creates an iterator over the `nodes_with_levels` vector. 
+        //   Each item in the iterator is a reference to a tuple `(&Unit<T>, usize)`.
+        // - `.any(|(node, _)| *node == v)`: The `.any()` method checks if any item in the iterator 
+        //   satisfies the provided condition. The closure `|(node, _)| *node == v` is the condition. 
+        //   This closure takes each tuple `(node, level)` (where `level` is ignored with `_`) and checks 
+        //   if `node` (which is a reference to a `Unit<T>`) matches the node `v`.
+        // - `*node`: Dereferences the `&Unit<T>` reference, so you can directly compare it to `v`.
+        // - `!`: Negates the result. If `.any()` returns `true` (meaning the node is already in the vector), 
+        //   the `!` turns it into `false`, indicating that the node should not be added again.
+        let node_exists = nodes.iter().any(|(node, _, _)| *node == v);
+        if !node_exists {
+            nodes.push((v, parent, level));
             for prev in &v.prev {
                 edges.push((prev.as_ref(), v));
-                build(prev.as_ref(), nodes, edges);
+                build(prev.as_ref(), Some(v), nodes, edges, level + 1);
             }
         }
     }
 
-    build(root, &mut nodes, &mut edges);
+    build(root, None, &mut nodes, &mut edges, 0);
     (nodes, edges)
 }
 
