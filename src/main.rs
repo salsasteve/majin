@@ -3,11 +3,17 @@ use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use majin::core::Unit;
 use majin::core::Op;
+use majin::core::Unit;
 // use ratatui::{backend::CrosstermBackend, widgets::canvas::Canvas, Terminal};
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout},
+    style::{Color, Style},
+    widgets::{Block, Borders, Paragraph},
+    Terminal,
+};
 use std::io;
-use ratatui::{backend::CrosstermBackend, widgets::{Block, Borders, Paragraph}, layout::{Layout, Constraint, Direction}, style::{Style, Color}, Terminal};
 
 // fn main() -> Result<(), io::Error> {
 //     // let a = Unit::new(2i32);
@@ -84,7 +90,7 @@ fn main() -> Result<(), io::Error> {
     root.label = "root".to_string();
 
     // Get the nodes and edges
-    let (nodes, edges) = trace(&root);
+    let (nodes, _edges) = trace(&root);
 
     // Set up terminal
     let mut terminal = setup_terminal()?;
@@ -100,7 +106,7 @@ fn main() -> Result<(), io::Error> {
 
             let mut graph_text = vec![];
 
-            for (node, parent ,level) in nodes.iter() {
+            for (node, parent, level) in nodes.iter() {
                 // Only process nodes that have an operation
                 if let Some(op) = &node.op {
                     // Determine indentation based on whether the node is a left or right child
@@ -114,11 +120,9 @@ fn main() -> Result<(), io::Error> {
                         0
                     };
 
-                        
-
                     let lines = draw_node_with_op(node, op);
                     let width = size.width as usize - indent;
-            
+
                     for line in lines {
                         let centered_line = format!("{:padding$}{}", "", line, padding = 0);
                         graph_text.push(center_text(&centered_line, width));
@@ -155,11 +159,6 @@ fn main() -> Result<(), io::Error> {
     // Restore terminal
     cleanup_terminal(&mut terminal)?;
     Ok(())
-}
-
-
-fn draw_simple_node(node: &Unit<i32>) -> Vec<String> {
-    vec![format!("{}", node.value)]
 }
 
 fn draw_node_with_op(node: &Unit<i32>, op: &Op) -> Vec<String> {
@@ -209,7 +208,12 @@ fn cleanup_terminal(
     Ok(())
 }
 
-fn trace<T>(root: &Unit<T>) -> (Vec<(&Unit<T>, Option<&Unit<T>>, usize)>, Vec<(&Unit<T>, &Unit<T>)>)
+fn trace<T>(
+    root: &Unit<T>,
+) -> (
+    Vec<(&Unit<T>, Option<&Unit<T>>, usize)>,
+    Vec<(&Unit<T>, &Unit<T>)>,
+)
 where
     T: std::fmt::Debug + std::cmp::PartialEq,
 {
@@ -226,14 +230,14 @@ where
         T: std::fmt::Debug + std::cmp::PartialEq,
     {
         // Check if the current node `v` is already in `nodes_with_levels`:
-        // - `nodes_with_levels.iter()`: Creates an iterator over the `nodes_with_levels` vector. 
+        // - `nodes_with_levels.iter()`: Creates an iterator over the `nodes_with_levels` vector.
         //   Each item in the iterator is a reference to a tuple `(&Unit<T>, usize)`.
-        // - `.any(|(node, _)| *node == v)`: The `.any()` method checks if any item in the iterator 
-        //   satisfies the provided condition. The closure `|(node, _)| *node == v` is the condition. 
-        //   This closure takes each tuple `(node, level)` (where `level` is ignored with `_`) and checks 
+        // - `.any(|(node, _)| *node == v)`: The `.any()` method checks if any item in the iterator
+        //   satisfies the provided condition. The closure `|(node, _)| *node == v` is the condition.
+        //   This closure takes each tuple `(node, level)` (where `level` is ignored with `_`) and checks
         //   if `node` (which is a reference to a `Unit<T>`) matches the node `v`.
         // - `*node`: Dereferences the `&Unit<T>` reference, so you can directly compare it to `v`.
-        // - `!`: Negates the result. If `.any()` returns `true` (meaning the node is already in the vector), 
+        // - `!`: Negates the result. If `.any()` returns `true` (meaning the node is already in the vector),
         //   the `!` turns it into `false`, indicating that the node should not be added again.
         let node_exists = nodes.iter().any(|(node, _, _)| *node == v);
         if !node_exists {
@@ -259,7 +263,7 @@ mod tests {
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 1);
-        assert!(nodes.contains(&&root));
+        assert_eq!(nodes[0].0, &root);
         assert!(edges.is_empty());
     }
 
@@ -269,7 +273,12 @@ mod tests {
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 1);
-        assert!(nodes.contains(&&root));
+        // (&root, parent, level)
+        // first element in the vector is the root node
+        // the parent is None because it is the root node
+        // the level is 0 because it is the root node
+        // first element in the tuple is a reference to the root node
+        assert_eq!(nodes[0].0, &root);
         assert!(edges.is_empty());
     }
 
@@ -277,46 +286,39 @@ mod tests {
     fn test_trace_multiple_nodes_f32() {
         let leaf1 = Unit::new(2.0f32, Some("leaf1".to_string()));
         let leaf2 = Unit::new(3.0f32, Some("leaf2".to_string()));
-        let root = leaf1 + leaf2;
+        let root = leaf1.clone() + leaf2.clone();
 
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 3);
-        // check for reference to a reference to root
-        assert!(nodes.contains(&&root));
-        // check for reference to a pointer to leaf1
-        assert!(nodes.contains(&&*root.prev[0]));
-        // check for reference to a pointer to leaf2
-        assert!(nodes.contains(&&*root.prev[1]));
+        // search for the reference to the root node
+        assert!(nodes.iter().any(|(node, _, _)| *node == &root));
+        // search for the reference to the leaf1 node
+        assert!(nodes.iter().any(|(node, _, _)| *node == &leaf1));
+        // search for the reference to the leaf2 node
+        assert!(nodes.iter().any(|(node, _, _)| *node == &leaf2));
 
-        (edges.len(), 2);
-        // check for reference to a tuple containing a reference to leaf1 and a reference to root
-        assert!(edges.contains(&(&root.prev[0], &root)));
-        // check for reference to a tuple containing a reference to leaf2 and a reference to root
-        assert!(edges.contains(&(&root.prev[1], &root)));
+        assert_eq!(edges.len(), 2);
+        assert!(edges.iter().any(|(n1, n2)| *n1 == &leaf1 && *n2 == &root));
+        assert!(edges.iter().any(|(n1, n2)| *n1 == &leaf2 && *n2 == &root));
     }
 
     #[test]
     fn test_trace_multiple_nodes() {
         let leaf1 = Unit::new(2i32, Some("leaf1".to_string()));
         let leaf2 = Unit::new(3i32, Some("leaf2".to_string()));
-        let root = leaf1 + leaf2;
+        let root = leaf1.clone() + leaf2.clone();
 
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 3);
-        // check for reference to a reference to root
-        assert!(nodes.contains(&&root));
-        // check for reference to a pointer to leaf1
-        assert!(nodes.contains(&&*root.prev[0]));
-        // check for reference to a pointer to leaf2
-        assert!(nodes.contains(&&*root.prev[1]));
+        assert!(nodes.iter().any(|(node, _, _)| *node == &root));
+        assert!(nodes.iter().any(|(node, _, _)| *node == &leaf1));
+        assert!(nodes.iter().any(|(node, _, _)| *node == &leaf2));
 
-        (edges.len(), 2);
-        // check for reference to a tuple containing a reference to leaf1 and a reference to root
-        assert!(edges.contains(&(&root.prev[0], &root)));
-        // check for reference to a tuple containing a reference to leaf2 and a reference to root
-        assert!(edges.contains(&(&root.prev[1], &root)));
+        assert_eq!(edges.len(), 2);
+        assert!(edges.iter().any(|(n1, n2)| *n1 == &leaf1 && *n2 == &root));
+        assert!(edges.iter().any(|(n1, n2)| *n1 == &leaf2 && *n2 == &root));
     }
 
     #[test]
@@ -325,40 +327,72 @@ mod tests {
         let leaf2 = Unit::new(3i32, Some("leaf2".to_string()));
         let leaf3 = Unit::new(4i32, Some("leaf3".to_string()));
         let leaf4 = Unit::new(5i32, Some("leaf4".to_string()));
+
         // 25 = (2 + 3) * 4 + 5
-        let root = (leaf1 + leaf2) * leaf3 + leaf4;
+        let root = (leaf1.clone() + leaf2.clone()) * leaf3.clone() + leaf4.clone();
 
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 7);
 
-        assert!(nodes.contains(&&root)); // root 25
+        // Validate the root node and its connections
+        assert!(nodes.iter().any(|(node, _, _)| *node == &root)); // root 25
         assert_eq!(root.value, 25);
-        // (20 + 5) = 25
-        assert!(nodes.contains(&&*root.prev[0])); // 20
+
+        // Validate connections and operations
+        assert!(nodes.iter().any(|(node, _, _)| **node == *root.prev[0])); // 20 (result of 5 * 4)
         assert_eq!(root.prev[0].value, 20);
-        assert!(nodes.contains(&&*root.prev[1])); // 5
+
+        assert!(nodes.iter().any(|(node, _, _)| **node == *root.prev[1])); // 5
         assert_eq!(root.prev[1].value, 5);
-        // (5 * 4) = 20
-        assert!(nodes.contains(&&*root.prev[0].prev[0])); // 5
+
+        assert!(nodes
+            .iter()
+            .any(|(node, _, _)| **node == *root.prev[0].prev[0])); // 5 (result of 2 + 3)
         assert_eq!(root.prev[0].prev[0].value, 5);
-        assert!(nodes.contains(&&*root.prev[0].prev[1])); // 4
+
+        assert!(nodes
+            .iter()
+            .any(|(node, _, _)| **node == *root.prev[0].prev[1])); // 4
         assert_eq!(root.prev[0].prev[1].value, 4);
-        // (2 + 3) = 5
-        assert!(nodes.contains(&&*root.prev[0].prev[0].prev[0])); // 2
+
+        assert!(nodes
+            .iter()
+            .any(|(node, _, _)| **node == *root.prev[0].prev[0].prev[0])); // 2
         assert_eq!(root.prev[0].prev[0].prev[0].value, 2);
-        assert!(nodes.contains(&&*root.prev[0].prev[0].prev[1])); // 3
+
+        assert!(nodes
+            .iter()
+            .any(|(node, _, _)| **node == *root.prev[0].prev[0].prev[1])); // 3
         assert_eq!(root.prev[0].prev[0].prev[1].value, 3);
 
+        // Validate the edges
         assert_eq!(edges.len(), 6);
-        // root = (20 + 5)
-        assert!(edges.contains(&(&root.prev[0], &root)));
-        assert!(edges.contains(&(&root.prev[1], &root)));
-        // 20 = (5 * 4)
-        assert!(edges.contains(&(&root.prev[0].prev[0], &root.prev[0])));
-        assert!(edges.contains(&(&root.prev[0].prev[1], &root.prev[0])));
-        // 5 = (2 + 3)
-        assert!(edges.contains(&(&root.prev[0].prev[0].prev[0], &root.prev[0].prev[0])));
-        assert!(edges.contains(&(&root.prev[0].prev[0].prev[1], &root.prev[0].prev[0])));
+        assert!(edges
+            .iter()
+            .any(|(n1, n2)| **n1 == *root.prev[0] && **n2 == root)); // 20 -> root
+        assert!(edges
+            .iter()
+            .any(|(n1, n2)| **n1 == *root.prev[1] && **n2 == root)); // 5 -> root
+
+        assert!(edges
+            .iter()
+            .any(|(n1, n2)| **n1 == *root.prev[0].prev[0] && **n2 == *root.prev[0])); // 5 -> 20
+        assert!(edges
+            .iter()
+            .any(|(n1, n2)| **n1 == *root.prev[0].prev[1] && **n2 == *root.prev[0])); // 4 -> 20
+
+        assert!(
+            edges
+                .iter()
+                .any(|(n1, n2)| **n1 == *root.prev[0].prev[0].prev[0]
+                    && **n2 == *root.prev[0].prev[0])
+        ); // 2 -> 5
+        assert!(
+            edges
+                .iter()
+                .any(|(n1, n2)| **n1 == *root.prev[0].prev[0].prev[1]
+                    && **n2 == *root.prev[0].prev[0])
+        ); // 3 -> 5
     }
 }

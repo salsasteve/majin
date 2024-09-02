@@ -5,6 +5,7 @@ use core::ops::{Add, Mul};
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]
 pub struct Unit<T> {
     pub value: T,
+    // pub grad: Option<T>,
     pub prev: ArrayVec<Box<Unit<T>>, 2>,
     pub op: Option<Op>,
     pub label: String,
@@ -20,7 +21,12 @@ impl<T> Unit<T> {
         }
     }
 
-    pub fn with_child(value: T, children: (Unit<T>, Unit<T>) , op: Op, label: Option<String>) -> Self {
+    pub fn with_child(
+        value: T,
+        children: (Unit<T>, Unit<T>),
+        op: Op,
+        label: Option<String>,
+    ) -> Self {
         let mut prev = ArrayVec::new();
         prev.push(Box::new(children.0));
         prev.push(Box::new(children.1));
