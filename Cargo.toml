@@ -7,8 +7,8 @@ edition = "2021"
 arrayvec = "0.7.6"
 ratatui = { version = "0.28", optional = true }
 crossterm = { version = "0.28", optional = true }
-petgraph = { version = "0.6", optional = true }
+tui-nodes = { version = "0.6", optional = true }
 
 [features]
 default = []
-debug = ["ratatui", "crossterm", "petgraph"]
+debug = ["ratatui", "crossterm", "tui-nodes"]

@@ -1,76 +1,22 @@
-use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode};
-use crossterm::execute;
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-};
 use majin::core::Op;
 use majin::core::Unit;
-// use ratatui::{backend::CrosstermBackend, widgets::canvas::Canvas, Terminal};
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    widgets::{Block, Borders, Paragraph},
-    Terminal,
+    prelude::Rect,
+    widgets::{BorderType, Paragraph},
+    Frame, Terminal,
+};
+
+use crossterm::{
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    execute,
+    terminal::enable_raw_mode,
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::io;
+use tui_nodes::*;
 
-// fn main() -> Result<(), io::Error> {
-//     // let a = Unit::new(2i32);
-//     // let b = Unit::new(3i32);
-//     // let c = Unit::new(4i32);
-//     // let d = Unit::new(5i32);
-//     // let root = (a + b) * c + d;
-
-//     // let (nodes, edges) = trace(&root);
-
-//     // print the nodes and edges with lines
-//     // in the terminal to visualize the tree
-//     // in this format:
-//     //     Data 2 ----
-//     //                 \
-//     //                  --> Op + --> Data 5 ----
-//     //                 /                         \
-//     //     Data 3 ----                            --> Op * --> Data 20 ----
-//     //                                           /                          \
-//     //                               Data 4 ----                             --> Data 25
-//     //                                                                      /
-//     //                                                         Data  5 ----
-
-//     // Coordinates for the triangle shape (caret)
-//     let x = 10;
-//     let y = 5;
-
-//     // Set up terminal
-//     let mut terminal = setup_terminal()?;
-
-//     // Main loop for rendering the triangle shape
-//     loop {
-//         terminal.draw(|f| {
-//             let size = f.area();
-//             let canvas = Canvas::default()
-//                 .x_bounds([0.0, size.width as f64])
-//                 .y_bounds([0.0, size.height as f64])
-//                 .paint(|ctx| {
-//                     // Draw a single triangle shape (caret `^`)
-//                     ctx.print(x as f64, y as f64, "■");
-//                 });
-
-//             f.render_widget(canvas, size);
-//         })?;
-
-//         // Break the loop if 'q' is pressed
-//         if let Event::Key(key) = event::read()? {
-//             if key.code == KeyCode::Char('q') {
-//                 break;
-//             }
-//         }
-//     }
-
-//     // Restore terminal
-//     cleanup_terminal(&mut terminal)?;
-//     Ok(())
-// }
+use std::collections::HashMap;
 
 fn main() -> Result<(), io::Error> {
     // Example to visualize
@@ -90,76 +36,95 @@ fn main() -> Result<(), io::Error> {
     root.label = "root".to_string();
 
     // Get the nodes and edges
-    let (nodes, _edges) = trace(&root);
+    let (nodes, edges) = trace(&root);
+
+    let node_layouts: Vec<NodeLayout> = nodes
+    .iter()
+    .map(|(node, _, _)| {
+        let mut layout = NodeLayout::new((8, 5))
+            .with_title(node.label.as_str())
+            .with_border_type(BorderType::Rounded);
+
+        match node.op {
+            Some(Op::Add(_)) => {
+                layout = layout.with_border_type(BorderType::Thick);
+            },
+            Some(Op::Mul(_)) => {
+                layout = layout.with_border_type(BorderType::Double);
+            },
+            _ => {}
+        }
+
+        layout
+    })
+    .collect();
+
+    let mut port_usage: HashMap<usize, usize> = HashMap::new();
+    
+    let connections: Vec<Connection> = edges
+        .iter()
+        .map(|(from, to)| {
+            let from_index = nodes.iter().position(|(node, _, _)| *node == *from).unwrap();
+            let to_index = nodes.iter().position(|(node, _, _)| *node == *to).unwrap();
+            
+            let from_port = *port_usage.entry(from_index).or_insert(0);
+            let to_port = *port_usage.entry(to_index).or_insert(0);
+            
+            // Update the port usage for both the from and to nodes
+            *port_usage.get_mut(&from_index).unwrap() += 1;
+            *port_usage.get_mut(&to_index).unwrap() += 1;
+            
+            
+            match nodes[to_index].0.op {
+                Some(Op::Add(_)) => {
+                    Connection::new(from_index, from_port, to_index, to_port).with_line_type(LineType::Thick)
+                },
+                Some(Op::Mul(_)) => {
+                    Connection::new(from_index, from_port, to_index, to_port).with_line_type(LineType::Double)
+                },
+                _ => {
+                    Connection::new(from_index, from_port, to_index, to_port).with_line_type(LineType::Plain)
+                }
+            }
+        })
+        .collect();
 
     // Set up terminal
+    print!("\x1b[2J\x1b[1;1H");
+    // setup terminal
     let mut terminal = setup_terminal()?;
     let mut scroll: u16 = 0;
 
-    loop {
-        terminal.draw(|f| {
-            let size = f.area();
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Percentage(100)].as_ref())
-                .split(size);
+    let space = Rect {
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+    };
+    let mut graph = NodeGraph::new(
+        node_layouts,
+        connections,
+        space.width as usize,
+        space.height as usize,
+    );
+    
+    terminal.draw(|f| {
+        
+        graph.calculate();
 
-            let mut graph_text = vec![];
-
-            for (node, parent, level) in nodes.iter() {
-                // Only process nodes that have an operation
-                if let Some(op) = &node.op {
-                    // Determine indentation based on whether the node is a left or right child
-                    let indent = if let Some(parent) = parent {
-                        if *parent.prev[0] == **node {
-                            level * 4
-                        } else {
-                            level * 4 + 2
-                        }
-                    } else {
-                        0
-                    };
-
-                    let lines = draw_node_with_op(node, op);
-                    let width = size.width as usize - indent;
-
-                    for line in lines {
-                        let centered_line = format!("{:padding$}{}", "", line, padding = 0);
-                        graph_text.push(center_text(&centered_line, width));
-                    }
-                }
-                // If the node doesn't have an op, it will be skipped.
-            }
-
-            let paragraph = Paragraph::new(graph_text.join("\n"))
-                .block(Block::default().borders(Borders::ALL).title("Graph"))
-                .style(Style::default().fg(Color::White))
-                .scroll((scroll, 0));
-
-            f.render_widget(paragraph, chunks[0]);
-        })?;
-
-        // Handle input for scrolling
-        if let Event::Key(key) = event::read()? {
-            match key.code {
-                KeyCode::Char('q') => break,
-                KeyCode::Up => {
-                    if scroll > 0 {
-                        scroll -= 1;
-                    }
-                }
-                KeyCode::Down => {
-                    scroll += 1;
-                }
-                _ => {}
-            }
+        let zones = graph.split(space);
+        for (idx, ea_zone) in zones.into_iter().enumerate() {
+            f.render_widget(Paragraph::new(format!("{idx}")), ea_zone);
         }
-    }
-
-    // Restore terminal
-    cleanup_terminal(&mut terminal)?;
+        f.render_stateful_widget(graph, space, &mut ());
+    })?;
+    
+    
+    // cleanup_terminal(&mut terminal)?;
     Ok(())
 }
+
+
 
 fn draw_node_with_op(node: &Unit<i32>, op: &Op) -> Vec<String> {
     let operation_symbol = match op {
@@ -181,11 +146,6 @@ fn draw_node_with_op(node: &Unit<i32>, op: &Op) -> Vec<String> {
     lines
 }
 
-fn center_text(text: &str, width: usize) -> String {
-    let padding = (width.saturating_sub(text.len())) / 2;
-    format!("{:padding$}{}", "", text, padding = padding)
-}
-
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, io::Error> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -198,7 +158,6 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, io::E
 fn cleanup_terminal(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
 ) -> Result<(), io::Error> {
-    disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
@@ -206,6 +165,11 @@ fn cleanup_terminal(
     )?;
     terminal.show_cursor()?;
     Ok(())
+}
+
+fn center_text(text: &str, width: usize) -> String {
+    let padding = (width.saturating_sub(text.len())) / 2;
+    format!("{:padding$}{}", "", text, padding = padding)
 }
 
 fn trace<T>(
