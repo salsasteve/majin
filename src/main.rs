@@ -39,52 +39,51 @@ fn main() -> Result<(), io::Error> {
     let (nodes, edges) = trace(&root);
 
     let node_layouts: Vec<NodeLayout> = nodes
-    .iter()
-    .map(|(node, _, _)| {
-        let mut layout = NodeLayout::new((8, 5))
-            .with_title(node.label.as_str())
-            .with_border_type(BorderType::Rounded);
+        .iter()
+        .map(|(node, _, _)| {
+            let mut layout = NodeLayout::new((8, 5))
+                .with_title(node.label.as_str())
+                .with_border_type(BorderType::Rounded);
 
-        match node.op {
-            Some(Op::Add(_)) => {
-                layout = layout.with_border_type(BorderType::Thick);
-            },
-            Some(Op::Mul(_)) => {
-                layout = layout.with_border_type(BorderType::Double);
-            },
-            _ => {}
-        }
+            match node.op {
+                Some(Op::Add(_)) => {
+                    layout = layout.with_border_type(BorderType::Thick);
+                }
+                Some(Op::Mul(_)) => {
+                    layout = layout.with_border_type(BorderType::Double);
+                }
+                _ => {}
+            }
 
-        layout
-    })
-    .collect();
+            layout
+        })
+        .collect();
 
     let mut port_usage: HashMap<usize, usize> = HashMap::new();
-    
+
     let connections: Vec<Connection> = edges
         .iter()
         .map(|(from, to)| {
-            let from_index = nodes.iter().position(|(node, _, _)| *node == *from).unwrap();
+            let from_index = nodes
+                .iter()
+                .position(|(node, _, _)| *node == *from)
+                .unwrap();
             let to_index = nodes.iter().position(|(node, _, _)| *node == *to).unwrap();
-            
+
             let from_port = *port_usage.entry(from_index).or_insert(0);
             let to_port = *port_usage.entry(to_index).or_insert(0);
-            
+
             // Update the port usage for both the from and to nodes
             *port_usage.get_mut(&from_index).unwrap() += 1;
             *port_usage.get_mut(&to_index).unwrap() += 1;
-            
-            
+
             match nodes[to_index].0.op {
-                Some(Op::Add(_)) => {
-                    Connection::new(from_index, from_port, to_index, to_port).with_line_type(LineType::Thick)
-                },
-                Some(Op::Mul(_)) => {
-                    Connection::new(from_index, from_port, to_index, to_port).with_line_type(LineType::Double)
-                },
-                _ => {
-                    Connection::new(from_index, from_port, to_index, to_port).with_line_type(LineType::Plain)
-                }
+                Some(Op::Add(_)) => Connection::new(from_index, from_port, to_index, to_port)
+                    .with_line_type(LineType::Thick),
+                Some(Op::Mul(_)) => Connection::new(from_index, from_port, to_index, to_port)
+                    .with_line_type(LineType::Double),
+                _ => Connection::new(from_index, from_port, to_index, to_port)
+                    .with_line_type(LineType::Plain),
             }
         })
         .collect();
@@ -107,9 +106,8 @@ fn main() -> Result<(), io::Error> {
         space.width as usize,
         space.height as usize,
     );
-    
+
     terminal.draw(|f| {
-        
         graph.calculate();
 
         let zones = graph.split(space);
@@ -118,13 +116,10 @@ fn main() -> Result<(), io::Error> {
         }
         f.render_stateful_widget(graph, space, &mut ());
     })?;
-    
-    
+
     // cleanup_terminal(&mut terminal)?;
     Ok(())
 }
-
-
 
 fn draw_node_with_op(node: &Unit<i32>, op: &Op) -> Vec<String> {
     let operation_symbol = match op {
