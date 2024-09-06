@@ -8,10 +8,10 @@ use ratatui::{
 };
 
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture},
+    event::EnableMouseCapture,
     execute,
     terminal::enable_raw_mode,
-    terminal::{EnterAlternateScreen},
+    terminal::EnterAlternateScreen,
 };
 use std::collections::HashMap;
 use std::io;
@@ -26,14 +26,11 @@ fn main() -> Result<(), io::Error> {
 
     let node_layouts = create_node_layouts(&nodes, &node_metadata);
 
-    let mut port_usage: HashMap<usize, usize> = HashMap::new();
-    
     let connections = create_connections(&nodes, &edges);
 
     print!("\x1b[2J\x1b[1;1H");
 
     let mut terminal = setup_terminal()?;
-    let mut scroll: u16 = 0;
 
     let space = Rect {
         x: 0,
