@@ -8,26 +8,22 @@ pub struct Unit<T> {
     // pub grad: f32,
     pub prev: ArrayVec<Box<Unit<T>>, 2>,
     pub op: Option<Op>,
-    pub label: String,
+    pub label: &'static str,
+    // pub description: Option<[char; 30]>,
 }
 
 impl<T> Unit<T> {
-    pub fn new(value: T, label: Option<String>) -> Self {
+    pub fn new(value: T, label: &'static str) -> Self {
         Unit {
             value,
             // grad: 0.0,
             prev: ArrayVec::new(),
             op: None,
-            label: label.unwrap_or_else(|| "".to_string()),
+            label,
         }
     }
 
-    pub fn with_child(
-        value: T,
-        children: (Unit<T>, Unit<T>),
-        op: Op,
-        label: Option<String>,
-    ) -> Self {
+    pub fn with_child(value: T, children: (Unit<T>, Unit<T>), op: Op, label: &'static str) -> Self {
         let mut prev = ArrayVec::new();
         prev.push(Box::new(children.0));
         prev.push(Box::new(children.1));
@@ -36,7 +32,7 @@ impl<T> Unit<T> {
             // grad: 0.0,
             prev: prev,
             op: Some(op),
-            label: label.unwrap_or_else(|| "".to_string()),
+            label: label,
         }
     }
 }
@@ -49,7 +45,7 @@ where
 
     fn add(self, other: Self) -> Self::Output {
         let value = self.value + other.value;
-        Unit::with_child(value, (self, other), Op::Add('+'), None)
+        Unit::with_child(value, (self, other), Op::Add('+'), "result")
     }
 }
 
@@ -61,7 +57,7 @@ where
 
     fn mul(self, other: Self) -> Self::Output {
         let value = self.value * other.value;
-        Unit::with_child(value, (self, other), Op::Mul('*'), None)
+        Unit::with_child(value, (self, other), Op::Mul('*'), "result")
     }
 }
 
@@ -77,52 +73,52 @@ mod tests {
 
     #[test]
     fn test_addition_i32() {
-        let a = Unit::new(5i32, Some("a".to_string()));
-        let b = Unit::new(10i32, Some("b".to_string()));
+        let a = Unit::new(5i32, "a");
+        let b = Unit::new(10i32, "b");
         let mut result = a.clone() + b.clone();
-        result.label = "result".to_string();
-        let ans = Unit::with_child(15i32, (a, b), Op::Add('+'), Some("result".to_string()));
+        result.label = "result";
+        let ans = Unit::with_child(15i32, (a, b), Op::Add('+'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
     fn test_addition_f32() {
-        let a = Unit::new(5.0f32, Some("a".to_string()));
-        let b = Unit::new(10.0f32, Some("b".to_string()));
+        let a = Unit::new(5.0f32, "a");
+        let b = Unit::new(10.0f32, "b");
         let mut result = a.clone() + b.clone();
-        result.label = "result".to_string();
-        let ans = Unit::with_child(15f32, (a, b), Op::Add('+'), Some("result".to_string()));
+        result.label = "result";
+        let ans = Unit::with_child(15f32, (a, b), Op::Add('+'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
     fn test_zero_addition_i8() {
-        let a = Unit::new(0i8, Some("a".to_string()));
-        let b = Unit::new(0i8, Some("b".to_string()));
+        let a = Unit::new(0i8, "a");
+        let b = Unit::new(0i8, "b");
         let mut result = a.clone() + b.clone();
-        result.label = "result".to_string();
-        let ans = Unit::with_child(0i8, (a, b), Op::Add('+'), Some("result".to_string()));
+        result.label = "result";
+        let ans = Unit::with_child(0i8, (a, b), Op::Add('+'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
     fn test_multiplication_i16() {
-        let a = Unit::new(3i16, Some("a".to_string()));
-        let b = Unit::new(4i16, Some("b".to_string()));
+        let a = Unit::new(3i16, "a");
+        let b = Unit::new(4i16, "b");
         let mut result = a.clone() * b.clone();
-        result.label = "result".to_string();
-        let ans = Unit::with_child(12i16, (a, b), Op::Mul('*'), Some("result".to_string()));
+        result.label = "result";
+        let ans = Unit::with_child(12i16, (a, b), Op::Mul('*'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
     fn test_all_i16() {
-        let a = Unit::new(2i16, Some("a".to_string()));
-        let b = Unit::new(-3i16, Some("b".to_string()));
-        let c = Unit::new(10i16, Some("c".to_string()));
+        let a = Unit::new(2i16, "a");
+        let b = Unit::new(-3i16, "b");
+        let c = Unit::new(10i16, "c");
         let mut result = a.clone() * b.clone() + c.clone();
-        result.label = "result".to_string();
-        let ans = Unit::with_child(4i16, (a * b, c), Op::Add('+'), Some("result".to_string()));
+        result.label = "result";
+        let ans = Unit::with_child(4i16, (a * b, c), Op::Add('+'), "result");
         assert_eq!(result, ans);
     }
 

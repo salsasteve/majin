@@ -8,6 +8,7 @@ arrayvec = "0.7.6"
 ratatui = { version = "0.28", optional = true }
 crossterm = { version = "0.28", optional = true }
 tui-nodes = { version = "0.6", optional = true }
+libm = "0.2.8"
 
 [features]
 default = []

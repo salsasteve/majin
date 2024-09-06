@@ -4,93 +4,34 @@ use ratatui::{
     backend::CrosstermBackend,
     prelude::Rect,
     widgets::{BorderType, Paragraph},
-    Frame, Terminal,
+    Terminal,
 };
 
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+    event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::enable_raw_mode,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen},
 };
+use std::collections::HashMap;
 use std::io;
 use tui_nodes::*;
 
-use std::collections::HashMap;
-
 fn main() -> Result<(), io::Error> {
-    // Example to visualize
-    let a = Unit::new(2i32, Some("a".to_string()));
-    let b = Unit::new(3i32, Some("b".to_string()));
-    let c = Unit::new(4i32, Some("c".to_string()));
-    let d = Unit::new(5i32, Some("d".to_string()));
-    let e = Unit::new(6i32, Some("e".to_string()));
-    // 25 = (2 + 3) * 4 + 5 + 6
-    let mut ab = a + b;
-    ab.label = "ab".to_string();
-    let mut abc = ab * c;
-    abc.label = "abc".to_string();
-    let mut abcd = abc + d;
-    abcd.label = "abcd".to_string();
-    let mut root = abcd + e;
-    root.label = "root".to_string();
+    let root = create_unit_tree();
 
-    // Get the nodes and edges
     let (nodes, edges) = trace(&root);
 
-    let node_layouts: Vec<NodeLayout> = nodes
-        .iter()
-        .map(|(node, _, _)| {
-            let mut layout = NodeLayout::new((8, 5))
-                .with_title(node.label.as_str())
-                .with_border_type(BorderType::Rounded);
+    let node_metadata = generate_node_metadata(&nodes);
 
-            match node.op {
-                Some(Op::Add(_)) => {
-                    layout = layout.with_border_type(BorderType::Thick);
-                }
-                Some(Op::Mul(_)) => {
-                    layout = layout.with_border_type(BorderType::Double);
-                }
-                _ => {}
-            }
-
-            layout
-        })
-        .collect();
+    let node_layouts = create_node_layouts(&nodes, &node_metadata);
 
     let mut port_usage: HashMap<usize, usize> = HashMap::new();
+    
+    let connections = create_connections(&nodes, &edges);
 
-    let connections: Vec<Connection> = edges
-        .iter()
-        .map(|(from, to)| {
-            let from_index = nodes
-                .iter()
-                .position(|(node, _, _)| *node == *from)
-                .unwrap();
-            let to_index = nodes.iter().position(|(node, _, _)| *node == *to).unwrap();
-
-            let from_port = *port_usage.entry(from_index).or_insert(0);
-            let to_port = *port_usage.entry(to_index).or_insert(0);
-
-            // Update the port usage for both the from and to nodes
-            *port_usage.get_mut(&from_index).unwrap() += 1;
-            *port_usage.get_mut(&to_index).unwrap() += 1;
-
-            match nodes[to_index].0.op {
-                Some(Op::Add(_)) => Connection::new(from_index, from_port, to_index, to_port)
-                    .with_line_type(LineType::Thick),
-                Some(Op::Mul(_)) => Connection::new(from_index, from_port, to_index, to_port)
-                    .with_line_type(LineType::Double),
-                _ => Connection::new(from_index, from_port, to_index, to_port)
-                    .with_line_type(LineType::Plain),
-            }
-        })
-        .collect();
-
-    // Set up terminal
     print!("\x1b[2J\x1b[1;1H");
-    // setup terminal
+
     let mut terminal = setup_terminal()?;
     let mut scroll: u16 = 0;
 
@@ -111,34 +52,107 @@ fn main() -> Result<(), io::Error> {
         graph.calculate();
 
         let zones = graph.split(space);
+
         for (idx, ea_zone) in zones.into_iter().enumerate() {
-            f.render_widget(Paragraph::new(format!("{idx}")), ea_zone);
+            let label = &node_metadata[idx].0;
+            f.render_widget(Paragraph::new(label.clone()), ea_zone);
         }
         f.render_stateful_widget(graph, space, &mut ());
     })?;
 
-    // cleanup_terminal(&mut terminal)?;
     Ok(())
 }
 
-fn draw_node_with_op(node: &Unit<i32>, op: &Op) -> Vec<String> {
-    let operation_symbol = match op {
-        Op::Add(_) => "+",
-        Op::Mul(_) => "*",
-    };
+fn create_unit_tree() -> Unit<i32> {
+    let a = Unit::new(2i32, "a");
+    let b = Unit::new(3i32, "b");
+    let c = Unit::new(4i32, "c");
+    let d = Unit::new(5i32, "d");
+    let e = Unit::new(6i32, "e");
+    // 25 = (2 + 3) * 4 + 5 + 6
+    let mut ab = a + b;
+    ab.label = "ab";
+    let mut abc = ab * c;
+    abc.label = "abc";
+    let mut abcd = abc + d;
+    abcd.label = "abcd";
+    let mut root = abcd + e;
+    root.label = "root";
 
-    let mut lines = Vec::new();
+    root
+}
 
-    if node.label == "root" {
-        lines.push(format!("{}", node.value));
-    }
+fn generate_node_metadata(
+    nodes: &Vec<(&Unit<i32>, Option<&Unit<i32>>, usize)>,
+) -> Vec<(String, String, String)> {
+    nodes
+        .iter()
+        .map(|(node, _, _)| {
+            let inner_label = match node.op {
+                Some(Op::Add(_)) => "+",
+                Some(Op::Mul(_)) => "*",
+                _ => "?",
+            };
+            (
+                format!("{}:{}", inner_label, node.value),
+                inner_label.to_owned(),
+                node.label.to_owned(),
+            )
+        })
+        .collect()
+}
 
-    lines.push(" |".to_string());
-    lines.push(format!(" {}", operation_symbol));
-    lines.push(" /   \\".to_string());
-    lines.push(format!(" {}   {}", node.prev[0].value, node.prev[1].value));
+fn create_node_layouts<'a>(nodes: &'a Vec<(&'a Unit<i32>, Option<&'a Unit<i32>>, usize)>, node_metadata: &'a [(String, String, String)]) -> Vec<NodeLayout<'a>> {
+    nodes.iter()
+        .enumerate()
+        .map(|(index, (node, _, _))| {
+            let title = &node_metadata[index].2;
+            let mut layout = NodeLayout::new((12, 5))
+                .with_title(title)
+                .with_border_type(BorderType::Rounded);
 
-    lines
+            match node.op {
+                Some(Op::Add(_)) => {
+                    layout = layout.with_border_type(BorderType::Thick);
+                }
+                Some(Op::Mul(_)) => {
+                    layout = layout.with_border_type(BorderType::Double);
+                }
+                _ => {}
+            }
+
+            layout
+        })
+        .collect()
+}
+
+fn create_connections(nodes: &Vec<(&Unit<i32>, Option<&Unit<i32>>, usize)>, edges: &Vec<(&Unit<i32>, &Unit<i32>)>) -> Vec<Connection> {
+    let mut port_usage: HashMap<usize, usize> = HashMap::new();
+
+    edges.iter()
+        .map(|(from, to)| {
+            let from_index = nodes
+                .iter()
+                .position(|(node, _, _)| *node == *from)
+                .unwrap();
+            let to_index = nodes.iter().position(|(node, _, _)| *node == *to).unwrap();
+
+            let from_port = *port_usage.entry(from_index).or_insert(0);
+            let to_port = *port_usage.entry(to_index).or_insert(0);
+
+            *port_usage.get_mut(&from_index).unwrap() += 1;
+            *port_usage.get_mut(&to_index).unwrap() += 1;
+
+            match nodes[to_index].0.op {
+                Some(Op::Add(_)) => Connection::new(from_index, from_port, to_index, to_port)
+                    .with_line_type(LineType::Thick),
+                Some(Op::Mul(_)) => Connection::new(from_index, from_port, to_index, to_port)
+                    .with_line_type(LineType::Double),
+                _ => Connection::new(from_index, from_port, to_index, to_port)
+                    .with_line_type(LineType::Plain),
+            }
+        })
+        .collect()
 }
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, io::Error> {
@@ -148,23 +162,6 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, io::E
     let backend = CrosstermBackend::new(stdout);
     let terminal = Terminal::new(backend)?;
     Ok(terminal)
-}
-
-fn cleanup_terminal(
-    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
-) -> Result<(), io::Error> {
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-    Ok(())
-}
-
-fn center_text(text: &str, width: usize) -> String {
-    let padding = (width.saturating_sub(text.len())) / 2;
-    format!("{:padding$}{}", "", text, padding = padding)
 }
 
 fn trace<T>(
@@ -218,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_trace_single_node() {
-        let root = Unit::new(0i8, Some("root".to_string()));
+        let root = Unit::new(0i8, "root");
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 1);
@@ -228,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_trace_single_node_f32() {
-        let root = Unit::new(0.0f32, Some("root".to_string()));
+        let root = Unit::new(0.0f32, "root");
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 1);
@@ -243,8 +240,8 @@ mod tests {
 
     #[test]
     fn test_trace_multiple_nodes_f32() {
-        let leaf1 = Unit::new(2.0f32, Some("leaf1".to_string()));
-        let leaf2 = Unit::new(3.0f32, Some("leaf2".to_string()));
+        let leaf1 = Unit::new(2.0f32, "leaf1");
+        let leaf2 = Unit::new(3.0f32, "leaf2");
         let root = leaf1.clone() + leaf2.clone();
 
         let (nodes, edges) = trace(&root);
@@ -264,8 +261,8 @@ mod tests {
 
     #[test]
     fn test_trace_multiple_nodes() {
-        let leaf1 = Unit::new(2i32, Some("leaf1".to_string()));
-        let leaf2 = Unit::new(3i32, Some("leaf2".to_string()));
+        let leaf1 = Unit::new(2i32, "leaf1");
+        let leaf2 = Unit::new(3i32, "leaf2");
         let root = leaf1.clone() + leaf2.clone();
 
         let (nodes, edges) = trace(&root);
@@ -282,11 +279,10 @@ mod tests {
 
     #[test]
     fn test_trace_deep_tree() {
-        let leaf1 = Unit::new(2i32, Some("leaf1".to_string()));
-        let leaf2 = Unit::new(3i32, Some("leaf2".to_string()));
-        let leaf3 = Unit::new(4i32, Some("leaf3".to_string()));
-        let leaf4 = Unit::new(5i32, Some("leaf4".to_string()));
-
+        let leaf1 = Unit::new(2i32, "leaf1");
+        let leaf2 = Unit::new(3i32, "leaf2");
+        let leaf3 = Unit::new(4i32, "leaf3");
+        let leaf4 = Unit::new(5i32, "leaf4");
         // 25 = (2 + 3) * 4 + 5
         let root = (leaf1.clone() + leaf2.clone()) * leaf3.clone() + leaf4.clone();
 

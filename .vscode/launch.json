@@ -31,7 +31,8 @@
                 "args": [
                     "build",
                     "--bin=majin",
-                    "--package=majin"
+                    "--package=majin",
+                    "--features=debug"
                 ],
                 "filter": {
                     "name": "majin",

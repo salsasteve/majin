@@ -2,6 +2,3 @@
 extern crate alloc;
 
 pub mod core;
-
-#[cfg(feature = "debug")]
-extern crate std;
