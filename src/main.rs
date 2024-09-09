@@ -8,10 +8,7 @@ use ratatui::{
 };
 
 use crossterm::{
-    event::EnableMouseCapture,
-    execute,
-    terminal::enable_raw_mode,
-    terminal::EnterAlternateScreen,
+    event::EnableMouseCapture, execute, terminal::enable_raw_mode, terminal::EnterAlternateScreen,
 };
 use std::collections::HashMap;
 use std::io;
@@ -60,12 +57,12 @@ fn main() -> Result<(), io::Error> {
     Ok(())
 }
 
-fn create_unit_tree() -> Unit<i32> {
-    let a = Unit::new(2i32, "a");
-    let b = Unit::new(3i32, "b");
-    let c = Unit::new(4i32, "c");
-    let d = Unit::new(5i32, "d");
-    let e = Unit::new(6i32, "e");
+fn create_unit_tree() -> Unit {
+    let a = Unit::new(2f32, "a");
+    let b = Unit::new(3f32, "b");
+    let c = Unit::new(4f32, "c");
+    let d = Unit::new(5f32, "d");
+    let e = Unit::new(6f32, "e");
     // 25 = (2 + 3) * 4 + 5 + 6
     let mut ab = a + b;
     ab.label = "ab";
@@ -80,7 +77,7 @@ fn create_unit_tree() -> Unit<i32> {
 }
 
 fn generate_node_metadata(
-    nodes: &Vec<(&Unit<i32>, Option<&Unit<i32>>, usize)>,
+    nodes: &Vec<(&Unit, Option<&Unit>, usize)>,
 ) -> Vec<(String, String, String)> {
     nodes
         .iter()
@@ -99,8 +96,12 @@ fn generate_node_metadata(
         .collect()
 }
 
-fn create_node_layouts<'a>(nodes: &'a Vec<(&'a Unit<i32>, Option<&'a Unit<i32>>, usize)>, node_metadata: &'a [(String, String, String)]) -> Vec<NodeLayout<'a>> {
-    nodes.iter()
+fn create_node_layouts<'a>(
+    nodes: &'a Vec<(&'a Unit, Option<&'a Unit>, usize)>,
+    node_metadata: &'a [(String, String, String)],
+) -> Vec<NodeLayout<'a>> {
+    nodes
+        .iter()
         .enumerate()
         .map(|(index, (node, _, _))| {
             let title = &node_metadata[index].2;
@@ -123,10 +124,14 @@ fn create_node_layouts<'a>(nodes: &'a Vec<(&'a Unit<i32>, Option<&'a Unit<i32>>,
         .collect()
 }
 
-fn create_connections(nodes: &Vec<(&Unit<i32>, Option<&Unit<i32>>, usize)>, edges: &Vec<(&Unit<i32>, &Unit<i32>)>) -> Vec<Connection> {
+fn create_connections(
+    nodes: &Vec<(&Unit, Option<&Unit>, usize)>,
+    edges: &Vec<(&Unit, &Unit)>,
+) -> Vec<Connection> {
     let mut port_usage: HashMap<usize, usize> = HashMap::new();
 
-    edges.iter()
+    edges
+        .iter()
         .map(|(from, to)| {
             let from_index = nodes
                 .iter()
@@ -161,35 +166,25 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<std::io::Stdout>>, io::E
     Ok(terminal)
 }
 
-fn trace<T>(
-    root: &Unit<T>,
-) -> (
-    Vec<(&Unit<T>, Option<&Unit<T>>, usize)>,
-    Vec<(&Unit<T>, &Unit<T>)>,
-)
-where
-    T: std::fmt::Debug + std::cmp::PartialEq,
-{
+fn trace(root: &Unit) -> (Vec<(&Unit, Option<&Unit>, usize)>, Vec<(&Unit, &Unit)>) {
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
 
-    fn build<'a, T>(
-        v: &'a Unit<T>,
-        parent: Option<&'a Unit<T>>,
-        nodes: &mut Vec<(&'a Unit<T>, Option<&'a Unit<T>>, usize)>,
-        edges: &mut Vec<(&'a Unit<T>, &'a Unit<T>)>,
+    fn build<'a>(
+        v: &'a Unit,
+        parent: Option<&'a Unit>,
+        nodes: &mut Vec<(&'a Unit, Option<&'a Unit>, usize)>,
+        edges: &mut Vec<(&'a Unit, &'a Unit)>,
         level: usize,
-    ) where
-        T: std::fmt::Debug + std::cmp::PartialEq,
-    {
+    ) {
         // Check if the current node `v` is already in `nodes_with_levels`:
         // - `nodes_with_levels.iter()`: Creates an iterator over the `nodes_with_levels` vector.
-        //   Each item in the iterator is a reference to a tuple `(&Unit<T>, usize)`.
+        //   Each item in the iterator is a reference to a tuple `(&Unit, usize)`.
         // - `.any(|(node, _)| *node == v)`: The `.any()` method checks if any item in the iterator
         //   satisfies the provided condition. The closure `|(node, _)| *node == v` is the condition.
         //   This closure takes each tuple `(node, level)` (where `level` is ignored with `_`) and checks
-        //   if `node` (which is a reference to a `Unit<T>`) matches the node `v`.
-        // - `*node`: Dereferences the `&Unit<T>` reference, so you can directly compare it to `v`.
+        //   if `node` (which is a reference to a `Unit`) matches the node `v`.
+        // - `*node`: Dereferences the `&Unit` reference, so you can directly compare it to `v`.
         // - `!`: Negates the result. If `.any()` returns `true` (meaning the node is already in the vector),
         //   the `!` turns it into `false`, indicating that the node should not be added again.
         let node_exists = nodes.iter().any(|(node, _, _)| *node == v);
@@ -212,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_trace_single_node() {
-        let root = Unit::new(0i8, "root");
+        let root = Unit::new(0f32, "root");
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 1);
@@ -258,8 +253,8 @@ mod tests {
 
     #[test]
     fn test_trace_multiple_nodes() {
-        let leaf1 = Unit::new(2i32, "leaf1");
-        let leaf2 = Unit::new(3i32, "leaf2");
+        let leaf1 = Unit::new(2f32, "leaf1");
+        let leaf2 = Unit::new(3f32, "leaf2");
         let root = leaf1.clone() + leaf2.clone();
 
         let (nodes, edges) = trace(&root);
@@ -276,10 +271,10 @@ mod tests {
 
     #[test]
     fn test_trace_deep_tree() {
-        let leaf1 = Unit::new(2i32, "leaf1");
-        let leaf2 = Unit::new(3i32, "leaf2");
-        let leaf3 = Unit::new(4i32, "leaf3");
-        let leaf4 = Unit::new(5i32, "leaf4");
+        let leaf1 = Unit::new(2f32, "leaf1");
+        let leaf2 = Unit::new(3f32, "leaf2");
+        let leaf3 = Unit::new(4f32, "leaf3");
+        let leaf4 = Unit::new(5f32, "leaf4");
         // 25 = (2 + 3) * 4 + 5
         let root = (leaf1.clone() + leaf2.clone()) * leaf3.clone() + leaf4.clone();
 
@@ -289,34 +284,34 @@ mod tests {
 
         // Validate the root node and its connections
         assert!(nodes.iter().any(|(node, _, _)| *node == &root)); // root 25
-        assert_eq!(root.value, 25);
+        assert_eq!(root.value, 25.0);
 
         // Validate connections and operations
         assert!(nodes.iter().any(|(node, _, _)| **node == *root.prev[0])); // 20 (result of 5 * 4)
-        assert_eq!(root.prev[0].value, 20);
+        assert_eq!(root.prev[0].value, 20.0);
 
         assert!(nodes.iter().any(|(node, _, _)| **node == *root.prev[1])); // 5
-        assert_eq!(root.prev[1].value, 5);
+        assert_eq!(root.prev[1].value, 5.0);
 
         assert!(nodes
             .iter()
             .any(|(node, _, _)| **node == *root.prev[0].prev[0])); // 5 (result of 2 + 3)
-        assert_eq!(root.prev[0].prev[0].value, 5);
+        assert_eq!(root.prev[0].prev[0].value, 5.0);
 
         assert!(nodes
             .iter()
             .any(|(node, _, _)| **node == *root.prev[0].prev[1])); // 4
-        assert_eq!(root.prev[0].prev[1].value, 4);
+        assert_eq!(root.prev[0].prev[1].value, 4.0);
 
         assert!(nodes
             .iter()
             .any(|(node, _, _)| **node == *root.prev[0].prev[0].prev[0])); // 2
-        assert_eq!(root.prev[0].prev[0].prev[0].value, 2);
+        assert_eq!(root.prev[0].prev[0].prev[0].value, 2.0);
 
         assert!(nodes
             .iter()
             .any(|(node, _, _)| **node == *root.prev[0].prev[0].prev[1])); // 3
-        assert_eq!(root.prev[0].prev[0].prev[1].value, 3);
+        assert_eq!(root.prev[0].prev[0].prev[1].value, 3.0);
 
         // Validate the edges
         assert_eq!(edges.len(), 6);

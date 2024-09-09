@@ -2,18 +2,18 @@ use alloc::boxed::Box;
 use arrayvec::ArrayVec;
 use core::ops::{Add, Mul};
 
-#[derive(Debug, Eq, Hash, PartialEq, Clone)]
-pub struct Unit<T> {
-    pub value: T,
+#[derive(Debug, PartialEq, Clone)]
+pub struct Unit {
+    pub value: f32,
     // pub grad: f32,
-    pub prev: ArrayVec<Box<Unit<T>>, 2>,
+    pub prev: ArrayVec<Box<Unit>, 2>,
     pub op: Option<Op>,
     pub label: &'static str,
     // pub description: Option<[char; 30]>,
 }
 
-impl<T> Unit<T> {
-    pub fn new(value: T, label: &'static str) -> Self {
+impl Unit {
+    pub fn new(value: f32, label: &'static str) -> Self {
         Unit {
             value,
             // grad: 0.0,
@@ -23,7 +23,7 @@ impl<T> Unit<T> {
         }
     }
 
-    pub fn with_child(value: T, children: (Unit<T>, Unit<T>), op: Op, label: &'static str) -> Self {
+    pub fn with_child(value: f32, children: (Unit, Unit), op: Op, label: &'static str) -> Self {
         let mut prev = ArrayVec::new();
         prev.push(Box::new(children.0));
         prev.push(Box::new(children.1));
@@ -37,10 +37,7 @@ impl<T> Unit<T> {
     }
 }
 
-impl<T> Add for Unit<T>
-where
-    T: Add<Output = T> + Copy,
-{
+impl Add for Unit {
     type Output = Self;
 
     fn add(self, other: Self) -> Self::Output {
@@ -49,10 +46,7 @@ where
     }
 }
 
-impl<T> Mul for Unit<T>
-where
-    T: Mul<Output = T> + Copy,
-{
+impl Mul for Unit {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self::Output {
@@ -72,17 +66,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_addition_i32() {
-        let a = Unit::new(5i32, "a");
-        let b = Unit::new(10i32, "b");
-        let mut result = a.clone() + b.clone();
-        result.label = "result";
-        let ans = Unit::with_child(15i32, (a, b), Op::Add('+'), "result");
-        assert_eq!(result, ans);
-    }
-
-    #[test]
-    fn test_addition_f32() {
+    fn test_addition() {
         let a = Unit::new(5.0f32, "a");
         let b = Unit::new(10.0f32, "b");
         let mut result = a.clone() + b.clone();
@@ -92,33 +76,33 @@ mod tests {
     }
 
     #[test]
-    fn test_zero_addition_i8() {
-        let a = Unit::new(0i8, "a");
-        let b = Unit::new(0i8, "b");
+    fn test_zero_addition() {
+        let a = Unit::new(0.0f32, "a");
+        let b = Unit::new(0.0f32, "b");
         let mut result = a.clone() + b.clone();
         result.label = "result";
-        let ans = Unit::with_child(0i8, (a, b), Op::Add('+'), "result");
+        let ans = Unit::with_child(0f32, (a, b), Op::Add('+'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
-    fn test_multiplication_i16() {
-        let a = Unit::new(3i16, "a");
-        let b = Unit::new(4i16, "b");
+    fn test_multiplication() {
+        let a = Unit::new(3.0f32, "a");
+        let b = Unit::new(4.0f32, "b");
         let mut result = a.clone() * b.clone();
         result.label = "result";
-        let ans = Unit::with_child(12i16, (a, b), Op::Mul('*'), "result");
+        let ans = Unit::with_child(12.0f32, (a, b), Op::Mul('*'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
-    fn test_all_i16() {
-        let a = Unit::new(2i16, "a");
-        let b = Unit::new(-3i16, "b");
-        let c = Unit::new(10i16, "c");
+    fn test_all() {
+        let a = Unit::new(2.0f32, "a");
+        let b = Unit::new(-3.0f32, "b");
+        let c = Unit::new(10.0f32, "c");
         let mut result = a.clone() * b.clone() + c.clone();
         result.label = "result";
-        let ans = Unit::with_child(4i16, (a * b, c), Op::Add('+'), "result");
+        let ans = Unit::with_child(4.0f32, (a * b, c), Op::Add('+'), "result");
         assert_eq!(result, ans);
     }
 
