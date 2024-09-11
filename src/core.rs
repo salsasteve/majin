@@ -9,7 +9,7 @@ pub struct Unit {
     pub grad: f64,
     pub prev: ArrayVec<Box<Unit>, 2>,
     pub op: Option<Op>,
-    pub label: &'static str, 
+    pub label: &'static str,
 }
 
 impl Unit {
@@ -36,9 +36,9 @@ impl Unit {
         Unit {
             value,
             grad: 0.0,
-            prev: prev,
+            prev,
             op: Some(op),
-            label: label,
+            label,
         }
     }
 
@@ -69,6 +69,14 @@ impl Unit {
             _ => {}
         }
     }
+
+    pub fn traverse_backward(&mut self) {
+            self.backward();
+            for child in self.prev.iter_mut() {
+                child.traverse_backward();
+            }
+    }
+
 }
 
 impl Add for Unit {
@@ -215,9 +223,39 @@ mod tests {
         result.prev[0].prev[1].backward();
         assert!((result.prev[0].prev[0].prev[0].grad - 0.25808).abs() < tolerance); // a grad
         assert!((result.prev[0].prev[0].prev[1].grad - 0.172053).abs() < tolerance); // b grad
-        assert!((result.prev[0].prev[0].prev[0].grad - 0.368685).abs() < tolerance); // c grad
-        assert!((result.prev[0].prev[1].prev[0].grad - 0.368685).abs() < tolerance); // d grad
+        assert!((result.prev[0].prev[1].prev[0].grad - 0.368685).abs() < tolerance); // c grad
+        assert!((result.prev[0].prev[1].prev[1].grad - 0.368685).abs() < tolerance); // d grad
+    }
+
+    #[test]
+    fn test_traverse_backward() {
+        let tolerance = 1e-6;
+        let a = Unit::new(0.50f64, "a");
+        let b = Unit::new(0.75f64, "b");
+        let c = Unit::new(0.25f64, "c");
+        let d = Unit::new(0.10f64, "d");
+        let intermediate1 = a * b; // 0.375
+        let intermediate2 = c + d; // 0.35
+        let intermediate3 = intermediate1 * intermediate2; // 0.13125
+        let mut result = intermediate3.tanh(); // 0.1305
+        result.label = "result";
+        result.grad = 1.0;
+        result.traverse_backward();
         
+        assert!((result.prev[0].value - 0.13125).abs() < tolerance);
+        assert_eq!(result.grad, 1.0);
+        assert!((result.prev[0].grad - 0.983161).abs() < tolerance);
+        
+        assert_eq!(result.prev[0].prev[0].value, 0.375); // a * b
+        assert_eq!(result.prev[0].prev[1].value, 0.35);  // c + d
+        assert!((result.prev[0].prev[0].grad - 0.344106).abs() < tolerance); // a * b grad
+        assert!((result.prev[0].prev[1].grad - 0.368685).abs() < tolerance); // c + d grad
+       
+        
+        assert!((result.prev[0].prev[0].prev[0].grad - 0.25808).abs() < tolerance);  // a grad
+        assert!((result.prev[0].prev[0].prev[1].grad - 0.172053).abs() < tolerance); // b grad
+        assert!((result.prev[0].prev[1].prev[0].grad - 0.368685).abs() < tolerance); // c grad
+        assert!((result.prev[0].prev[1].prev[1].grad - 0.368685).abs() < tolerance); // d grad
     }
 
     #[test]
