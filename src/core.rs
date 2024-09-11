@@ -1,11 +1,12 @@
 use alloc::boxed::Box;
 use arrayvec::ArrayVec;
 use core::ops::{Add, Mul};
+use libm::tanh;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Unit {
-    pub value: f32,
-    pub grad: f32,
+    pub value: f64,
+    pub grad: f64,
     pub prev: ArrayVec<Box<Unit>, 2>,
     pub op: Option<Op>,
     pub label: &'static str,
@@ -13,7 +14,7 @@ pub struct Unit {
 }
 
 impl Unit {
-    pub fn new(value: f32, label: &'static str) -> Self {
+    pub fn new(value: f64, label: &'static str) -> Self {
         Unit {
             value,
             grad: 0.0,
@@ -23,10 +24,16 @@ impl Unit {
         }
     }
 
-    pub fn with_child(value: f32, children: (Unit, Unit), op: Op, label: &'static str) -> Self {
+    pub fn with_child(
+        value: f64,
+        children: ArrayVec<Unit, 2>,
+        op: Op,
+        label: &'static str,
+    ) -> Self {
         let mut prev = ArrayVec::new();
-        prev.push(Box::new(children.0));
-        prev.push(Box::new(children.1));
+        for child in children.iter() {
+            prev.push(Box::new(child.clone()));
+        }
         Unit {
             value,
             grad: 0.0,
@@ -36,15 +43,29 @@ impl Unit {
         }
     }
 
+    pub fn tanh(&self) -> Self {
+        let value = tanh(self.value);
+        let mut children = ArrayVec::new();
+        children.push(self.clone());
+        Unit::with_child(value, children, Op::Tanh('t'), "tanh")
+    }
+
     pub fn backward(&mut self) {
         match self.op {
             Some(Op::Add(_)) => {
+                // f(x) = x + y => df/dx = 1, df/dy = 1
                 self.prev[0].grad = 1.0 * self.grad;
                 self.prev[1].grad = 1.0 * self.grad;
             }
             Some(Op::Mul(_)) => {
+                // f(x) = x * y => df/dx = y, df/dy = x
                 self.prev[0].grad = self.prev[1].value * self.grad;
                 self.prev[1].grad = self.prev[0].value * self.grad;
+            }
+            Some(Op::Tanh(_)) => {
+                // tanh'(x) = 1 - tanh^2(x)
+                let t = tanh(self.value);
+                self.prev[0].grad = (1.0 - t * t) * self.grad;
             }
             _ => {}
         }
@@ -56,7 +77,10 @@ impl Add for Unit {
 
     fn add(self, other: Self) -> Self::Output {
         let value = self.value + other.value;
-        Unit::with_child(value, (self, other), Op::Add('+'), "result")
+        let mut children = ArrayVec::new();
+        children.push(self.clone());
+        children.push(other.clone());
+        Unit::with_child(value, children, Op::Add('+'), "result")
     }
 }
 
@@ -65,7 +89,10 @@ impl Mul for Unit {
 
     fn mul(self, other: Self) -> Self::Output {
         let value = self.value * other.value;
-        Unit::with_child(value, (self, other), Op::Mul('*'), "result")
+        let mut children = ArrayVec::new();
+        children.push(self.clone());
+        children.push(other.clone());
+        Unit::with_child(value, children, Op::Mul('*'), "result")
     }
 }
 
@@ -73,6 +100,9 @@ impl Mul for Unit {
 pub enum Op {
     Add(char),
     Mul(char),
+    Tanh(char),
+    Sigmoid(char),
+    Relu(char),
 }
 
 #[cfg(test)]
@@ -81,40 +111,49 @@ mod tests {
 
     #[test]
     fn test_addition() {
-        let a = Unit::new(5.0f32, "a");
-        let b = Unit::new(10.0f32, "b");
+        let a = Unit::new(5.0f64, "a");
+        let b = Unit::new(10.0f64, "b");
         let mut result = a.clone() + b.clone();
         result.label = "result";
-        let ans = Unit::with_child(15f32, (a, b), Op::Add('+'), "result");
+        let mut children = ArrayVec::new();
+        children.push(a);
+        children.push(b);
+        let ans = Unit::with_child(15f64, children, Op::Add('+'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
     fn test_multiplication() {
-        let a = Unit::new(3.0f32, "a");
-        let b = Unit::new(4.0f32, "b");
+        let a = Unit::new(3.0f64, "a");
+        let b = Unit::new(4.0f64, "b");
         let mut result = a.clone() * b.clone();
         result.label = "result";
-        let ans = Unit::with_child(12.0f32, (a, b), Op::Mul('*'), "result");
+        let mut children = ArrayVec::new();
+        children.push(a);
+        children.push(b);
+        let ans = Unit::with_child(12.0f64, children, Op::Mul('*'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
     fn test_all() {
-        let a = Unit::new(2.0f32, "a");
-        let b = Unit::new(-3.0f32, "b");
-        let c = Unit::new(10.0f32, "c");
+        let a = Unit::new(2.0f64, "a");
+        let b = Unit::new(-3.0f64, "b");
+        let c = Unit::new(10.0f64, "c");
         let mut result = a.clone() * b.clone() + c.clone();
         result.label = "result";
-        let ans = Unit::with_child(4.0f32, (a * b, c), Op::Add('+'), "result");
+        let mut children = ArrayVec::new();
+        children.push(a * b);
+        children.push(c);
+        let ans = Unit::with_child(4.0f64, children, Op::Add('+'), "result");
         assert_eq!(result, ans);
     }
 
     #[test]
     fn test_backward() {
-        let a = Unit::new(2.0f32, "a");
-        let b = Unit::new(-3.0f32, "b");
-        let c = Unit::new(10.0f32, "c");
+        let a = Unit::new(2.0f64, "a");
+        let b = Unit::new(-3.0f64, "b");
+        let c = Unit::new(10.0f64, "c");
         let intermediate = a * b;
         let mut result = intermediate + c;
         result.label = "result";
@@ -130,10 +169,10 @@ mod tests {
 
     #[test]
     fn test_complex1_backward() {
-        let a = Unit::new(2.0f32, "a");
-        let b = Unit::new(-3.0f32, "b");
-        let c = Unit::new(10.0f32, "c");
-        let d = Unit::new(5.0f32, "d");
+        let a = Unit::new(2.0f64, "a");
+        let b = Unit::new(-3.0f64, "b");
+        let c = Unit::new(10.0f64, "c");
+        let d = Unit::new(5.0f64, "d");
         let intermediate1 = a * b; // -6
         let intermediate2 = c + d; // 15
         let mut result = intermediate1 * intermediate2;
@@ -149,6 +188,37 @@ mod tests {
         assert_eq!(result.prev[0].prev[1].grad, 30.0); // 15 * 2
         assert_eq!(result.prev[1].prev[0].grad, -6.0); // -6 * 1
         assert_eq!(result.prev[1].prev[1].grad, -6.0); // -6 * 1
+    }
+
+    #[test]
+    fn test_complex2_backward() {
+        let tolerance = 1e-6;
+        let a = Unit::new(0.50f64, "a");
+        let b = Unit::new(0.75f64, "b");
+        let c = Unit::new(0.25f64, "c");
+        let d = Unit::new(0.10f64, "d");
+        let intermediate1 = a * b; // 0.375
+        let intermediate2 = c + d; // 0.35
+        let intermediate3 = intermediate1 * intermediate2; // 0.13125
+        let mut result = intermediate3.tanh(); // 0.1305
+        result.label = "result";
+        result.grad = 1.0;
+        result.backward(); //  (1 - tanh^2(0.1305)) * 1 = 0.999993
+        assert!((result.prev[0].value - 0.13125).abs() < tolerance);
+        assert_eq!(result.grad, 1.0);
+        assert!((result.prev[0].grad - 0.983161).abs() < tolerance);
+        result.prev[0].backward();
+        assert_eq!(result.prev[0].prev[0].value, 0.375);
+        assert_eq!(result.prev[0].prev[1].value, 0.35);
+        assert!((result.prev[0].prev[0].grad - 0.344106).abs() < tolerance); // a * b
+        assert!((result.prev[0].prev[1].grad - 0.368685).abs() < tolerance); // c + d
+        result.prev[0].prev[0].backward();
+        result.prev[0].prev[1].backward();
+        assert!((result.prev[0].prev[0].prev[0].grad - 0.25808).abs() < tolerance); // a
+        assert!((result.prev[0].prev[0].prev[1].grad - 0.172053).abs() < tolerance); // b
+        assert!((result.prev[0].prev[0].prev[0].grad - 0.368685).abs() < tolerance); // c
+        assert!((result.prev[0].prev[1].prev[0].grad - 0.368685).abs() < tolerance); // d
+        
     }
 
     #[test]
