@@ -58,11 +58,11 @@ fn main() -> Result<(), io::Error> {
 }
 
 fn create_unit_tree() -> Unit {
-    let a = Unit::new(2f32, "a");
-    let b = Unit::new(3f32, "b");
-    let c = Unit::new(4f32, "c");
-    let d = Unit::new(5f32, "d");
-    let e = Unit::new(6f32, "e");
+    let a = Unit::new(2.0f64, "a");
+    let b = Unit::new(3.0f64, "b");
+    let c = Unit::new(4.0f64, "c");
+    let d = Unit::new(5.0f64, "d");
+    let e = Unit::new(6.0f64, "e");
     // 25 = (2 + 3) * 4 + 5 + 6
     let mut ab = a + b;
     ab.label = "ab";
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn test_trace_single_node() {
-        let root = Unit::new(0f32, "root");
+        let root = Unit::new(0.0f64, "root");
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 1);
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_trace_single_node_f32() {
-        let root = Unit::new(0.0f32, "root");
+        let root = Unit::new(0.0f64, "root");
         let (nodes, edges) = trace(&root);
 
         assert_eq!(nodes.len(), 1);
@@ -232,8 +232,8 @@ mod tests {
 
     #[test]
     fn test_trace_multiple_nodes_f32() {
-        let leaf1 = Unit::new(2.0f32, "leaf1");
-        let leaf2 = Unit::new(3.0f32, "leaf2");
+        let leaf1 = Unit::new(2.0f64, "leaf1");
+        let leaf2 = Unit::new(3.0f64, "leaf2");
         let root = leaf1.clone() + leaf2.clone();
 
         let (nodes, edges) = trace(&root);
@@ -253,8 +253,8 @@ mod tests {
 
     #[test]
     fn test_trace_multiple_nodes() {
-        let leaf1 = Unit::new(2f32, "leaf1");
-        let leaf2 = Unit::new(3f32, "leaf2");
+        let leaf1 = Unit::new(2.0f64, "leaf1");
+        let leaf2 = Unit::new(3.0f64, "leaf2");
         let root = leaf1.clone() + leaf2.clone();
 
         let (nodes, edges) = trace(&root);
@@ -271,10 +271,10 @@ mod tests {
 
     #[test]
     fn test_trace_deep_tree() {
-        let leaf1 = Unit::new(2f32, "leaf1");
-        let leaf2 = Unit::new(3f32, "leaf2");
-        let leaf3 = Unit::new(4f32, "leaf3");
-        let leaf4 = Unit::new(5f32, "leaf4");
+        let leaf1 = Unit::new(2.0f64, "leaf1");
+        let leaf2 = Unit::new(3.0f64, "leaf2");
+        let leaf3 = Unit::new(4.0f64, "leaf3");
+        let leaf4 = Unit::new(5.0f64, "leaf4");
         // 25 = (2 + 3) * 4 + 5
         let root = (leaf1.clone() + leaf2.clone()) * leaf3.clone() + leaf4.clone();
 

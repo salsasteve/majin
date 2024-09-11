@@ -9,8 +9,7 @@ pub struct Unit {
     pub grad: f64,
     pub prev: ArrayVec<Box<Unit>, 2>,
     pub op: Option<Op>,
-    pub label: &'static str,
-    // pub description: Option<[char; 30]>,
+    pub label: &'static str, 
 }
 
 impl Unit {
@@ -208,16 +207,16 @@ mod tests {
         assert_eq!(result.grad, 1.0);
         assert!((result.prev[0].grad - 0.983161).abs() < tolerance);
         result.prev[0].backward();
-        assert_eq!(result.prev[0].prev[0].value, 0.375);
-        assert_eq!(result.prev[0].prev[1].value, 0.35);
-        assert!((result.prev[0].prev[0].grad - 0.344106).abs() < tolerance); // a * b
-        assert!((result.prev[0].prev[1].grad - 0.368685).abs() < tolerance); // c + d
+        assert_eq!(result.prev[0].prev[0].value, 0.375); // a * b
+        assert_eq!(result.prev[0].prev[1].value, 0.35); // c + d
+        assert!((result.prev[0].prev[0].grad - 0.344106).abs() < tolerance); // a * b grad
+        assert!((result.prev[0].prev[1].grad - 0.368685).abs() < tolerance); // c + d grad
         result.prev[0].prev[0].backward();
         result.prev[0].prev[1].backward();
-        assert!((result.prev[0].prev[0].prev[0].grad - 0.25808).abs() < tolerance); // a
-        assert!((result.prev[0].prev[0].prev[1].grad - 0.172053).abs() < tolerance); // b
-        assert!((result.prev[0].prev[0].prev[0].grad - 0.368685).abs() < tolerance); // c
-        assert!((result.prev[0].prev[1].prev[0].grad - 0.368685).abs() < tolerance); // d
+        assert!((result.prev[0].prev[0].prev[0].grad - 0.25808).abs() < tolerance); // a grad
+        assert!((result.prev[0].prev[0].prev[1].grad - 0.172053).abs() < tolerance); // b grad
+        assert!((result.prev[0].prev[0].prev[0].grad - 0.368685).abs() < tolerance); // c grad
+        assert!((result.prev[0].prev[1].prev[0].grad - 0.368685).abs() < tolerance); // d grad
         
     }
 
